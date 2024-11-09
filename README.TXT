@@ -1,5 +1,7 @@
 PART 1.
 
+Discussion thread: https://bitcointalk.org/index.php?topic=5517607
+
 This software demonstrates various ways to solve the ECDLP using Kangaroos.
 The required number of operations is approximately K * sqrt(range), where K is a coefficient that depends on the method used.
 This software demonstrates four methods:
