@@ -259,7 +259,7 @@ u32 __stdcall thr_proc_classic(void* data)
 // Paper: a lot, just google :)
 // they promise K=1.7, but there is a trick to improve it to K=1.6
 
-bool Collision_3way(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, bool same)
+bool Collision_3way(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType)
 {
 	if (TameType == TAME)
 	{
@@ -279,8 +279,6 @@ bool Collision_3way(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, 
 	}
 	else //two wild
 	{
-		if (same)
-			t.Neg();
 		EcInt pk = t;
 		pk.Sub(w);
 		if (pk.data[4] >> 63)
@@ -371,19 +369,7 @@ u32 __stdcall thr_proc_3way(void* data)
 				if (pref)
 				{
 					if (pref->type == nrec.type)
-					{
-						if (pref->type == TAME)
-							continue;
-
-						//if it's wild, we can find the key from the same type if distances are different
-						if (*(u64*)pref->d == *(u64*)nrec.d)
-							continue;
-						else
-						{
-							same = true;
-							//ToLog("key found by same wild");
-						}
-					}
+						continue; //we ignore mirror collisions because high DP will eliminate them
 
 					EcInt w, t;
 					int TameType, WildType;
@@ -402,7 +388,7 @@ u32 __stdcall thr_proc_3way(void* data)
 						WildType = nrec.type;
 					}
 
-					bool res = Collision_3way(PointToSolve, t, TameType, w, WildType, same);
+					bool res = Collision_3way(PointToSolve, t, TameType, w, WildType);
 					if (!res)
 						continue;
 					found = true;
@@ -701,6 +687,7 @@ u32 __stdcall thr_proc_sota(void* data)
 			kangs[i].p = ec.MultiplyG(kangs[i].dist);
 			kangs[i].iter = 0;
 		}
+
 		for (int i = tame_cnt; i < tame_cnt + wild_cnt; i++)
 			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
 		for (int i = tame_cnt + wild_cnt; i < KANG_CNT; i++) 
