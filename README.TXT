@@ -12,15 +12,15 @@ In practice, K is approximately 2.1 for this method.
 
 2 - 3-way. A more advanced method. There are three groups of kangaroos: tame, wild1, and wild2. 
 As soon as a collision happens between any two types of kangaroos, the ECDLP is solved.
-In practice, K is approximately 1.7 for this method, but it can be improved to 1.6 if the range of tame kangaroos is reduced.
+In practice, K is approximately 1.6 for this method.
 
 3 - Mirror. This method uses two groups of kangaroos and the symmetry of the elliptic curve to improve K. 
 Another trick is to reduce the range for wild kangaroos.
-In practice, K is approximately 1.35 for this method. 
+In practice, K is approximately 1.3 for this method.
 The main issue with this method is that the kangaroos loop continuously.
 
 4 - SOTA. This method uses three groups of kangaroos and the symmetry of the elliptic curve.
-In practice, K is approximately 1.23 for this method. The main issue is the same as in the Mirror method.
+In practice, K is approximately 1.15 for this method. The main issue is the same as in the Mirror method.
 I couldn’t find any papers about this method, so let's assume that I invented it :)
 
 Important note: this software handles kangaroo looping in a very simple way. 

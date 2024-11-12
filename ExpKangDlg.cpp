@@ -259,7 +259,7 @@ u32 __stdcall thr_proc_classic(void* data)
 // Paper: a lot, just google :)
 // they promise K=1.7, but there is a trick to improve it to K=1.6
 
-bool Collision_3way(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType)
+bool Collision_3way(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, bool same)
 {
 	if (TameType == TAME)
 	{
@@ -279,6 +279,8 @@ bool Collision_3way(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType)
 	}
 	else //two wild
 	{
+		if (same)
+			t.Neg();
 		EcInt pk = t;
 		pk.Sub(w);
 		if (pk.data[4] >> 63)
@@ -314,7 +316,7 @@ u32 __stdcall thr_proc_3way(void* data)
 		EcPoint PointToSolve;
 		EcPoint NegPointToSolve;
 
-		KToSolve.RndBits(RANGE_BITS - 0);
+		KToSolve.RndBits(RANGE_BITS);
 
 		for (int i = 0; i < KANG_CNT; i++)
 		{
@@ -364,11 +366,24 @@ u32 __stdcall thr_proc_3way(void* data)
 					else
 						nrec.type = WILD2;
 
+				bool same = false;
 				TDB_Rec* pref = (TDB_Rec*)db->FindOrAddDataBlock((BYTE*)&nrec, sizeof(nrec));
 				if (pref)
 				{
 					if (pref->type == nrec.type)
-						continue;
+					{
+						if (pref->type == TAME)
+							continue;
+
+						//if it's wild, we can find the key from the same type if distances are different
+						if (*(u64*)pref->d == *(u64*)nrec.d)
+							continue;
+						else
+						{
+							same = true;
+							//ToLog("key found by same wild");
+						}
+					}
 
 					EcInt w, t;
 					int TameType, WildType;
@@ -387,8 +402,8 @@ u32 __stdcall thr_proc_3way(void* data)
 						WildType = nrec.type;
 					}
 
-					bool res = Collision_3way(PointToSolve, t, TameType, w, WildType);
-					if (!res) //ignore mirrored collisions
+					bool res = Collision_3way(PointToSolve, t, TameType, w, WildType, same);
+					if (!res)
 						continue;
 					found = true;
 					break;
@@ -407,20 +422,42 @@ u32 __stdcall thr_proc_3way(void* data)
 // Paper: "Using Equivalence Classes to Accelerate Solving the Discrete Logarithm Problem in a Short Interval", 2010
 // Paper: "A variant of the Galbraith–Ruprai algorithm for discrete logarithms with improved complexity", 2018
 
-bool Collision_Mirror(EcPoint& pnt, EcInt t, EcInt w)
+bool Collision_Mirror(EcPoint& pnt, EcInt t, EcInt w, bool same)
 {
-	EcInt pk = t;
-	pk.Sub(w);
-	pk.Add(Int_HalfRange);
-	EcPoint P = ec.MultiplyG(pk);
-	if (P.IsEqual(pnt))
-		return true;
-	t.Neg();
-	pk = t;
-	pk.Sub(w);
-	pk.Add(Int_HalfRange);
-	P = ec.MultiplyG(pk);
-	return P.IsEqual(pnt);
+	if (same)
+	{
+		t.Neg();		
+		EcInt pk = t;
+		pk.Sub(w);
+		if (pk.data[4] >> 63)
+			pk.Neg();
+		pk.ShiftRight(1);
+		EcInt sv = pk;
+		pk.Add(Int_HalfRange);
+		EcPoint P = ec.MultiplyG(pk);
+		if (P.IsEqual(pnt))
+			return true;
+		pk = sv;
+		pk.Neg();
+		pk.Add(Int_HalfRange);
+		P = ec.MultiplyG(pk);
+		return P.IsEqual(pnt);		
+	}
+	else
+	{
+		EcInt pk = t;
+		pk.Sub(w);
+		pk.Add(Int_HalfRange);
+		EcPoint P = ec.MultiplyG(pk);
+		if (P.IsEqual(pnt))
+			return true;
+		t.Neg();
+		pk = t;
+		pk.Sub(w);
+		pk.Add(Int_HalfRange);
+		P = ec.MultiplyG(pk);
+		return P.IsEqual(pnt);
+	}
 }
 
 u32 __stdcall thr_proc_mirror(void* data)
@@ -517,11 +554,24 @@ u32 __stdcall thr_proc_mirror(void* data)
 				else
 					nrec.type = WILD;
 
+				bool same = false;
 				TDB_Rec* pref = (TDB_Rec*)db->FindOrAddDataBlock((BYTE*)&nrec, sizeof(nrec));
 				if (pref)
 				{
 					if (pref->type == nrec.type)
-						continue;
+					{
+						if (pref->type == TAME)
+							continue;
+
+						//if it's wild, we can find the key from the same type if distances are different
+						if (*(u64*)pref->d == *(u64*)nrec.d)
+							continue;
+						else
+						{							
+							same = true;
+							//ToLog("key found by same wild");
+						}
+					}
 
 					EcInt w, t;
 					if (pref->type != TAME)
@@ -539,7 +589,7 @@ u32 __stdcall thr_proc_mirror(void* data)
 						if (pref->d[11] == 0xFF) memset(((BYTE*)t.data) + 12, 0xFF, 28);
 					}
 
-					bool res = Collision_Mirror(PointToSolve, t, w);
+					bool res = Collision_Mirror(PointToSolve, t, w, same);
 					if (!res)
 						continue;
 
@@ -729,7 +779,16 @@ u32 __stdcall thr_proc_sota(void* data)
 				if (pref)
 				{
 					if (pref->type == nrec.type)
-						continue;
+					{
+						if (pref->type == TAME)
+							continue;
+
+						//if it's wild, we can find the key from the same type if distances are different
+						if (*(u64*)pref->d == *(u64*)nrec.d)
+							continue;
+						//else
+						//	ToLog("key found by same wild");
+					}
 
 					EcInt w, t;
 					int TameType, WildType;
