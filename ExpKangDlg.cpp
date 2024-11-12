@@ -601,7 +601,7 @@ u32 __stdcall thr_proc_mirror(void* data)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // I couldn’t find any papers about this method, so let's assume that I invented it. :)
-// it gives best K=1.23
+// it gives best K=1.15
 
 bool Collision_SOTA(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, bool IsNeg)
 {
