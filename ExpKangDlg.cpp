@@ -951,7 +951,6 @@ void CExpKangDlg::OnBnClickedButton3()
 	TestKangaroo(METHOD_MIRROR);
 }
 
-//new method, K=1.23. Combines 3-way and Mirror ideas
 void CExpKangDlg::OnBnClickedButton4()
 {
 	TestKangaroo(METHOD_SOTA);
