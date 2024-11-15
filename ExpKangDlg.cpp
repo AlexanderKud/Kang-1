@@ -654,8 +654,6 @@ u32 __stdcall thr_proc_sota(void* data)
 
 	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
 	int max_iters = (1 << DP_BITS) * 20;
-	int wild_cnt = (int)(0.27 * KANG_CNT);
-	int tame_cnt = KANG_CNT - 2 * wild_cnt;
 	while (1)
 	{
 		if (InterlockedDecrement(&ToSolveCnt) < 0)
@@ -669,7 +667,7 @@ u32 __stdcall thr_proc_sota(void* data)
 
 		for (int i = 0; i < KANG_CNT; i++)
 		{
-			if (i < tame_cnt)
+			if (i < KANG_CNT / 3)
 				kangs[i].dist.RndBits(RANGE_BITS - 4);
 			else
 			{
@@ -688,9 +686,9 @@ u32 __stdcall thr_proc_sota(void* data)
 			kangs[i].iter = 0;
 		}
 
-		for (int i = tame_cnt; i < tame_cnt + wild_cnt; i++)
+		for (int i = KANG_CNT / 3; i < 2 * KANG_CNT / 3; i++)
 			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
-		for (int i = tame_cnt + wild_cnt; i < KANG_CNT; i++) 
+		for (int i = 2 * KANG_CNT / 3; i < KANG_CNT; i++)
 			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
 
 		bool found = false;
@@ -712,7 +710,7 @@ u32 __stdcall thr_proc_sota(void* data)
 					cycled = true;
 				if (cycled)
 				{
-					if (i < tame_cnt)
+					if (i < KANG_CNT / 3)
 						kangs[i].dist.RndBits(RANGE_BITS - 4);
 					else
 					{
@@ -722,9 +720,9 @@ u32 __stdcall thr_proc_sota(void* data)
 
 					kangs[i].iter = 0;
 					kangs[i].p = ec.MultiplyG(kangs[i].dist);
-					if (i >= tame_cnt)
+					if (i >= KANG_CNT / 3)
 					{
-						if (i < tame_cnt + wild_cnt)
+						if (i < 2 * KANG_CNT / 3)
 							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
 						else
 							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
@@ -753,11 +751,11 @@ u32 __stdcall thr_proc_sota(void* data)
 
 				TDB_Rec nrec;
 				memcpy(nrec.x, kangs[i].p.x.data, 12);
-				memcpy(nrec.d, kangs[i].dist.data, 12);
-				if (i < tame_cnt)
+				memcpy(nrec.d, kangs[i].dist.data, 12); 
+				if (i < KANG_CNT / 3)
 					nrec.type = TAME;
 				else
-					if (i < tame_cnt + wild_cnt)
+					if (i < 2 * KANG_CNT / 3)
 						nrec.type = WILD;
 					else
 						nrec.type = WILD2;
