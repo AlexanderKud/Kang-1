@@ -22,6 +22,7 @@ The main issue with this method is that the kangaroos loop continuously.
 4 - SOTA. This method uses three groups of kangaroos and the symmetry of the elliptic curve.
 In practice, K is approximately 1.15 for this method. The main issue is the same as in the Mirror method.
 I couldn’t find any papers about this method, so let's assume that I invented it :)
+See "diagram.jpg" for details.
 
 Important note: this software handles kangaroo looping in a very simple way. 
 This method is bad for large ranges higher than 100 bits. 
