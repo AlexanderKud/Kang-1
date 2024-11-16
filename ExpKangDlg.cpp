@@ -19,7 +19,7 @@
 #define new DEBUG_NEW
 #endif
 
-
+ 
 #define RANGE_BITS			(32 + 8)
 #define DP_BITS				(5)
 #define KANG_CNT			(1 << (int)(0.25 * RANGE_BITS))

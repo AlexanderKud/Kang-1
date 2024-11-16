@@ -28,3 +28,4 @@ Important note: this software handles kangaroo looping in a very simple way.
 This method is bad for large ranges higher than 100 bits. 
 Next part will demonstrate a good way to handle loops.
 
+![sota diagram](diagram.jpg)
