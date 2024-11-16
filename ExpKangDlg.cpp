@@ -19,7 +19,7 @@
 #define new DEBUG_NEW
 #endif
 
- 
+
 #define RANGE_BITS			(32 + 8)
 #define DP_BITS				(5)
 #define KANG_CNT			(1 << (int)(0.25 * RANGE_BITS))
@@ -801,7 +801,7 @@ u32 __stdcall thr_proc_sota(void* data)
 					{
 						//bool w12 = ((pref->type == WILD) && (nrec.type == WILD2)) || ((pref->type == WILD2) && (nrec.type == WILD));
 						//if (w12) //in rare cases WILD and WILD2 can collide in mirror, in this case there is no way to find K
-						//	ToLog("W1 and W2 collides in mirror");
+						//	ToLog("W1 and W2 collided in mirror");
 						continue;
 					}
 					found = true;
