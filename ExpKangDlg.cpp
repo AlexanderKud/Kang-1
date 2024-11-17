@@ -488,7 +488,7 @@ u32 __stdcall thr_proc_mirror(void* data)
 		{
 			for (int i = 0; i < KANG_CNT; i++)
 			{
-				bool inv = (kangs[i].p.y.data[3] & 1);				
+				bool inv = (kangs[i].p.y.data[0] & 1);				
 				bool cycled = false;
 				for (int j = 0; j < OLD_LEN; j++)
 					if (old[OLD_LEN * i + j] == kangs[i].dist.data[0])
@@ -696,7 +696,7 @@ u32 __stdcall thr_proc_sota(void* data)
 		{
 			for (int i = 0; i < KANG_CNT; i++)
 			{
-				bool inv = (kangs[i].p.y.data[3] & 1);
+				bool inv = (kangs[i].p.y.data[0] & 1);
 				bool cycled = false;
 				for (int j = 0; j < OLD_LEN; j++)
 					if (old[OLD_LEN * i + j] == kangs[i].dist.data[0])
