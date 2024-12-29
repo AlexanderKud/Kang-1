@@ -62,6 +62,59 @@ EcPoint Ec::AddPoints(EcPoint& pnt1, EcPoint& pnt2)
 	return res;
 }
 
+EcPoint Ec::AddPointsAndGetInv(EcPoint& pnt1, EcPoint& pnt2, EcInt& inv)
+{
+	EcPoint res;
+	EcInt dx, dy, lambda, lambda2;
+
+	dx = pnt2.x;
+	dx.SubModP(pnt1.x);
+	dx.InvModP();
+	inv = dx;
+
+	dy = pnt2.y;
+	dy.SubModP(pnt1.y);
+
+	lambda = dy;
+	lambda.MulModP(dx);
+	lambda2 = lambda;
+	lambda2.MulModP(lambda);
+
+	res.x = lambda2;
+	res.x.SubModP(pnt1.x);
+	res.x.SubModP(pnt2.x);
+
+	res.y = pnt2.x;
+	res.y.SubModP(res.x);
+	res.y.MulModP(lambda);
+	res.y.SubModP(pnt2.y);
+	return res;
+}
+
+EcPoint Ec::AddPointsHaveInv(EcPoint& pnt1, EcPoint& pnt2, EcInt& inv)
+{
+	EcPoint res;
+	EcInt dy, lambda, lambda2;
+
+	dy = pnt2.y;
+	dy.SubModP(pnt1.y);
+
+	lambda = dy;
+	lambda.MulModP(inv);
+	lambda2 = lambda;
+	lambda2.MulModP(lambda);
+
+	res.x = lambda2;
+	res.x.SubModP(pnt1.x);
+	res.x.SubModP(pnt2.x);
+
+	res.y = pnt2.x;
+	res.y.SubModP(res.x);
+	res.y.MulModP(lambda);
+	res.y.SubModP(pnt2.y);
+	return res;
+}
+
 // https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#Point_doubling
 EcPoint Ec::DoublePoint(EcPoint& pnt)
 {

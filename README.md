@@ -24,6 +24,12 @@ In practice, K is approximately 1.15 for this method. The main issue is the same
 I couldn’t find any papers about this method, so let's assume that I invented it :)
 See "diagram.jpg" for details.
 
+5 - SOTA+. This method is the same as SOTA, but uses cheap second point. 
+When we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same. 
+If inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K. 
+K is approximately 1.02 for this method. 
+Again, I couldn’t find any papers about this method, so let's assume that I invented it. 
+
 Important note: this software handles kangaroo looping in a very simple way. 
 This method is bad for large ranges higher than 100 bits. 
 Next part will demonstrate a good way to handle loops.

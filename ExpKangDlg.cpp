@@ -55,6 +55,7 @@ BEGIN_MESSAGE_MAP(CExpKangDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON2, &CExpKangDlg::OnBnClickedButton2)
 	ON_BN_CLICKED(IDC_BUTTON3, &CExpKangDlg::OnBnClickedButton3)
 	ON_BN_CLICKED(IDC_BUTTON4, &CExpKangDlg::OnBnClickedButton4)
+	ON_BN_CLICKED(IDC_BUTTON5, &CExpKangDlg::OnBnClickedButton5)
 END_MESSAGE_MAP()
 
 BOOL CExpKangDlg::OnInitDialog()
@@ -825,11 +826,223 @@ u32 __stdcall thr_proc_sota(void* data)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+u32 __stdcall thr_proc_sota_plus(void* data)
+{
+	TThrRec* rec = (TThrRec*)data;
+	rec->iters = 0;
+	EcKangs kangs;
+	kangs.resize(KANG_CNT);
+	u32 DPmask = (1 << DP_BITS) - 1;
+	TFastBase* db = new TFastBase();
+	db->Init(sizeof(TDB_Rec::x), sizeof(TDB_Rec), 0, 0);
+
+	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
+	int max_iters = (1 << DP_BITS) * 20;
+	while (1)
+	{
+		if (InterlockedDecrement(&ToSolveCnt) < 0)
+			break;
+		EcInt KToSolve;
+		EcPoint PointToSolve;
+		EcPoint NegPointToSolve;
+
+		memset(old, 0, OLD_LEN * 8 * KANG_CNT);
+		KToSolve.RndBits(RANGE_BITS);
+
+		for (int i = 0; i < KANG_CNT; i++)
+		{
+			if (i < KANG_CNT / 3)
+				kangs[i].dist.RndBits(RANGE_BITS - 4);
+			else
+			{
+				kangs[i].dist.RndBits(RANGE_BITS - 1);
+				kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
+			}
+		}
+
+		PointToSolve = ec.MultiplyG(KToSolve);
+		EcPoint Pnt1 = ec.AddPoints(PointToSolve, Pnt_NegHalfRange);
+		EcPoint Pnt2 = Pnt1;
+		Pnt2.y.NegModP();
+		for (int i = 0; i < KANG_CNT; i++)
+		{
+			kangs[i].p = ec.MultiplyG(kangs[i].dist);
+			kangs[i].iter = 0;
+		}
+
+		for (int i = KANG_CNT / 3; i < 2 * KANG_CNT / 3; i++)
+			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
+		for (int i = 2 * KANG_CNT / 3; i < KANG_CNT; i++)
+			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
+
+		bool found = false;
+		while (!found)
+		{
+			for (int i = 0; i < KANG_CNT; i++)
+			{
+				bool inv = (kangs[i].p.y.data[0] & 1);
+				bool cycled = false;
+				for (int j = 0; j < OLD_LEN; j++)
+					if (old[OLD_LEN * i + j] == kangs[i].dist.data[0])
+					{
+						cycled = true;
+						break;
+					}
+				old[OLD_LEN * i + (kangs[i].iter % OLD_LEN)] = kangs[i].dist.data[0];
+				kangs[i].iter++;
+				if (kangs[i].iter > max_iters)
+					cycled = true;
+				if (cycled)
+				{
+					if (i < KANG_CNT / 3)
+						kangs[i].dist.RndBits(RANGE_BITS - 4);
+					else
+					{
+						kangs[i].dist.RndBits(RANGE_BITS - 1);
+						kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
+					}
+
+					kangs[i].iter = 0;
+					kangs[i].p = ec.MultiplyG(kangs[i].dist);
+					if (i >= KANG_CNT / 3)
+					{
+						if (i < 2 * KANG_CNT / 3)
+							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
+						else
+							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
+					}
+					memset(&old[OLD_LEN * i], 0, 8 * OLD_LEN);
+					continue;
+				}
+
+				int jmp_ind = kangs[i].p.x.data[0] % JMP_CNT;
+				EcPoint AddP = EcJumps[jmp_ind].p;
+				EcPoint Saved = kangs[i].p;
+				EcInt inversion;
+				if (!inv)
+				{
+					kangs[i].p = ec.AddPointsAndGetInv(kangs[i].p, AddP, inversion);
+					kangs[i].dist.Add(EcJumps[jmp_ind].dist);
+				}
+				else
+				{
+					AddP.y.NegModP();
+					kangs[i].p = ec.AddPointsAndGetInv(kangs[i].p, AddP, inversion);
+					kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
+				}
+				rec->iters++;
+
+//when we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same
+//if inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K
+				if ((kangs[i].p.x.data[0] & 1) != 0)
+				{
+					//	rec->iters++; point (PreviousPoint - JumpPoint) is cheap so we don't count it
+					AddP.y.NegModP();
+					EcPoint p2 = ec.AddPointsHaveInv(Saved, AddP, inversion);
+
+					if ((p2.x.data[0] & 1) == 0)
+					{
+						kangs[i].p = p2;
+						if (!inv)
+						{
+							kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
+							kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
+						}
+						else
+						{
+							kangs[i].dist.Add(EcJumps[jmp_ind].dist);
+							kangs[i].dist.Add(EcJumps[jmp_ind].dist);
+						}
+					}
+				}
+////
+
+				if (kangs[i].p.x.data[0] & DPmask)
+					continue;
+
+				TDB_Rec nrec;
+				memcpy(nrec.x, kangs[i].p.x.data, 12);
+				memcpy(nrec.d, kangs[i].dist.data, 12);
+				if (i < KANG_CNT / 3)
+					nrec.type = TAME;
+				else
+					if (i < 2 * KANG_CNT / 3)
+						nrec.type = WILD;
+					else
+						nrec.type = WILD2;
+
+				TDB_Rec* pref = (TDB_Rec*)db->FindOrAddDataBlock((BYTE*)&nrec, sizeof(nrec));
+				if (pref)
+				{
+					if (pref->type == nrec.type)
+					{
+						if (pref->type == TAME)
+							continue;
+
+						//if it's wild, we can find the key from the same type if distances are different
+						if (*(u64*)pref->d == *(u64*)nrec.d)
+							continue;
+						//else
+						//	ToLog("key found by same wild");
+					}
+
+					EcInt w, t;
+					int TameType, WildType;
+					if (pref->type != TAME)
+					{
+						memcpy(w.data, pref->d, sizeof(pref->d));
+						if (pref->d[11] == 0xFF) memset(((BYTE*)w.data) + 12, 0xFF, 28);
+						memcpy(t.data, nrec.d, sizeof(nrec.d));
+						if (nrec.d[11] == 0xFF) memset(((BYTE*)t.data) + 12, 0xFF, 28);
+						TameType = nrec.type;
+						WildType = pref->type;
+					}
+					else
+					{
+						memcpy(w.data, nrec.d, sizeof(nrec.d));
+						if (nrec.d[11] == 0xFF) memset(((BYTE*)w.data) + 12, 0xFF, 28);
+						memcpy(t.data, pref->d, sizeof(pref->d));
+						if (pref->d[11] == 0xFF) memset(((BYTE*)t.data) + 12, 0xFF, 28);
+						TameType = TAME;
+						WildType = nrec.type;
+					}
+
+					bool res = Collision_SOTA(PointToSolve, t, TameType, w, WildType, false) || Collision_SOTA(PointToSolve, t, TameType, w, WildType, true);
+					if (!res)
+					{
+						//bool w12 = ((pref->type == WILD) && (nrec.type == WILD2)) || ((pref->type == WILD2) && (nrec.type == WILD));
+						//if (w12) //in rare cases WILD and WILD2 can collide in mirror, in this case there is no way to find K
+						//	ToLog("W1 and W2 collided in mirror");
+						continue;
+					}
+					found = true;
+					break;
+				}
+				else
+				{
+					kangs[i].iter = 0;
+					memset(&old[OLD_LEN * i], 0, 8 * OLD_LEN);
+				}
+			}
+		}
+		db->Clear(false);
+		InterlockedIncrement(&SolvedCnt);
+	}
+	free(old);
+	delete db;
+	InterlockedDecrement(&ThrCnt);
+	return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 #define METHOD_CLASSIC		0
 #define METHOD_3WAY			1
 #define METHOD_MIRROR		2
 #define METHOD_SOTA			3
-char* names[] = { "Classic", "3-Way", "Mirror", "SOTA" };
+#define METHOD_SOTA_PLUS	4
+char* names[] = { "Classic", "3-Way", "Mirror", "SOTA", "SOTA+" };
 
 void Prepare(int Method)
 {
@@ -847,7 +1060,7 @@ void Prepare(int Method)
 		EcJumps[i].dist = minjump;
 		t.RndMax(minjump);
 		EcJumps[i].dist.Add(t);
-		if ((Method == METHOD_3WAY) || (Method == METHOD_SOTA))
+		if ((Method == METHOD_3WAY) || (Method == METHOD_SOTA) || (Method == METHOD_SOTA_PLUS))
 			EcJumps[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 		EcJumps[i].p = ec.MultiplyG(EcJumps[i].dist);	
 	}
@@ -896,6 +1109,9 @@ void TestKangaroo(int Method)
 			break;
 		case METHOD_SOTA:
 			thr_proc_ptr = thr_proc_sota;
+			break;
+		case METHOD_SOTA_PLUS:
+			thr_proc_ptr = thr_proc_sota_plus;
 			break;
 		default:
 			return;
@@ -954,3 +1170,7 @@ void CExpKangDlg::OnBnClickedButton4()
 	TestKangaroo(METHOD_SOTA);
 }
 
+void CExpKangDlg::OnBnClickedButton5()
+{
+	TestKangaroo(METHOD_SOTA_PLUS);
+}

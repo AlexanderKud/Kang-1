@@ -54,6 +54,8 @@ class Ec
 {
 public:
 	static EcPoint AddPoints(EcPoint& pnt1, EcPoint& pnt2);
+	static EcPoint AddPointsAndGetInv(EcPoint& pnt1, EcPoint& pnt2, EcInt& inv);
+	static EcPoint AddPointsHaveInv(EcPoint& pnt1, EcPoint& pnt2, EcInt& inv);
 	static EcPoint DoublePoint(EcPoint& pnt);
 	static EcPoint MultiplyG(EcInt& k);
 };
