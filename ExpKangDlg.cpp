@@ -918,6 +918,7 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 				int jmp_ind = kangs[i].p.x.data[0] % JMP_CNT;
 				EcPoint AddP = EcJumps[jmp_ind].p;
 				EcPoint Saved = kangs[i].p;
+				EcInt SavedD = kangs[i].dist;
 				EcInt inversion;
 				if (!inv)
 				{
@@ -939,20 +940,14 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 					//	rec->iters++; point (PreviousPoint - JumpPoint) is cheap so we don't count it
 					AddP.y.NegModP();
 					EcPoint p2 = ec.AddPointsHaveInv(Saved, AddP, inversion);
-
 					if ((p2.x.data[0] & 1) == 0)
 					{
 						kangs[i].p = p2;
+						kangs[i].dist = SavedD;
 						if (!inv)
-						{
 							kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
-							kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
-						}
 						else
-						{
 							kangs[i].dist.Add(EcJumps[jmp_ind].dist);
-							kangs[i].dist.Add(EcJumps[jmp_ind].dist);
-						}
 					}
 				}
 ////
