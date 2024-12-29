@@ -4,7 +4,7 @@ Discussion thread: https://bitcointalk.org/index.php?topic=5517607
 
 This software demonstrates various ways to solve the ECDLP using Kangaroos.
 The required number of operations is approximately K * sqrt(range), where K is a coefficient that depends on the method used.
-This software demonstrates four methods:
+This software demonstrates five methods:
 
 1 - Classic. The simplest method. There are two groups of kangaroos: tame and wild. 
 As soon as a collision between any tame and wild kangaroos happens, the ECDLP is solved.
