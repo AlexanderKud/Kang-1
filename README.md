@@ -28,7 +28,7 @@ See "diagram.jpg" for details.
 When we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same. 
 If inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K. 
 Using cheap point costs only (1MUL+1SQR)/2. K is approximately 1.02 for this method (assuming cheap point is free). 
-Again, I couldn’t find any papers about this method, so let's assume that I invented it. 
+Again, I couldn’t find any papers about this method applied to Kangaroo, so let's assume that I invented it. 
 
 Important note: this software handles kangaroo looping in a very simple way. 
 This method is bad for large ranges higher than 100 bits. 
