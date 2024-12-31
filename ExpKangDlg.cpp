@@ -935,6 +935,7 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 
 //when we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same
 //if inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K
+//using cheap point costs only (1MUL+1SQR)/2, this code is not optimized and always calculates Y for both points which is not necessary
 				if ((kangs[i].p.x.data[0] & 1) != 0)
 				{
 					//	rec->iters++; point (PreviousPoint - JumpPoint) is cheap so we don't count it
