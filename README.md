@@ -1,4 +1,4 @@
-PART 1.
+PART 1
 
 Discussion thread: https://bitcointalk.org/index.php?topic=5517607
 

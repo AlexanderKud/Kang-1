@@ -22,14 +22,23 @@
 
 #define RANGE_BITS			(32 + 8)
 #define DP_BITS				(5)
+//#define KANG_CNT			512
 #define KANG_CNT			(1 << (int)(0.25 * RANGE_BITS))
-
 #define CPU_THR_CNT			(63)
 #define POINTS_CNT			(1000)
 
 #define JMP_CNT				(16 * 1024)
 #define OLD_LEN				(16)
 
+//#define BETTER_EDGE_K
+//#define INTERVAL_STATS
+
+#ifdef INTERVAL_STATS
+	#define INTERVAL_BITS	5
+	#define INTERVAL_CNT	(1 << INTERVAL_BITS)
+	int int_cnt[INTERVAL_CNT];
+	u64 int_sum[INTERVAL_CNT];
+#endif
 
 void ToLog(char* str);
 
@@ -194,7 +203,7 @@ u32 __stdcall thr_proc_classic(void* data)
 
 		EcInt KToSolve;
 		EcPoint PointToSolve;
-
+		u64 pnt_iters = 0;
 		KToSolve.RndBits(RANGE_BITS);
 
 		for (int i = 0; i < KANG_CNT; i++)
@@ -216,6 +225,8 @@ u32 __stdcall thr_proc_classic(void* data)
 				kangs[i].p = ec.AddPoints(kangs[i].p, EcJumps[jmp_ind].p);
 				kangs[i].dist.Add(EcJumps[jmp_ind].dist);	
 				rec->iters++;
+				pnt_iters++;
+
 				if (kangs[i].p.x.data[0] & DPmask)
 					continue;
 
@@ -248,6 +259,12 @@ u32 __stdcall thr_proc_classic(void* data)
 				}
 			}
 		}
+#ifdef INTERVAL_STATS
+		KToSolve.ShiftRight(RANGE_BITS - INTERVAL_BITS);
+		int int_ind = (int)KToSolve.data[0];
+		int_cnt[int_ind]++;
+		int_sum[int_ind] += pnt_iters;
+#endif
 		db->Clear(false);
 		InterlockedIncrement(&SolvedCnt);
 	}
@@ -314,7 +331,7 @@ u32 __stdcall thr_proc_3way(void* data)
 		EcInt KToSolve;
 		EcPoint PointToSolve;
 		EcPoint NegPointToSolve;
-
+		u64 pnt_iters = 0;
 		KToSolve.RndBits(RANGE_BITS);
 
 		for (int i = 0; i < KANG_CNT; i++)
@@ -351,6 +368,8 @@ u32 __stdcall thr_proc_3way(void* data)
 				kangs[i].p = ec.AddPoints(kangs[i].p, EcJumps[jmp_ind].p);
 				kangs[i].dist.Add(EcJumps[jmp_ind].dist);
 				rec->iters++;
+				pnt_iters++;
+
 				if (kangs[i].p.x.data[0] & DPmask)
 					continue;
 
@@ -397,6 +416,12 @@ u32 __stdcall thr_proc_3way(void* data)
 				}
 			}
 		}
+#ifdef INTERVAL_STATS
+		KToSolve.ShiftRight(RANGE_BITS - INTERVAL_BITS);
+		int int_ind = (int)KToSolve.data[0];
+		int_cnt[int_ind]++;
+		int_sum[int_ind] += pnt_iters;
+#endif
 		db->Clear(false);
 		InterlockedIncrement(&SolvedCnt);
 	}
@@ -465,7 +490,7 @@ u32 __stdcall thr_proc_mirror(void* data)
 		EcInt KToSolve;
 		EcPoint PointToSolve;
 		EcPoint NegPointToSolve;
-
+		u64 pnt_iters = 0;
 		memset(old, 0, OLD_LEN * 8 * KANG_CNT);
 		KToSolve.RndBits(RANGE_BITS);
 
@@ -529,6 +554,7 @@ u32 __stdcall thr_proc_mirror(void* data)
 					kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
 				}
 				rec->iters++;
+				pnt_iters++;
 
 				if (kangs[i].p.x.data[0] & DPmask)
 					continue;
@@ -590,6 +616,12 @@ u32 __stdcall thr_proc_mirror(void* data)
 				}
 			}
 		}
+#ifdef INTERVAL_STATS
+		KToSolve.ShiftRight(RANGE_BITS - INTERVAL_BITS);
+		int int_ind = (int)KToSolve.data[0];
+		int_cnt[int_ind]++;
+		int_sum[int_ind] += pnt_iters;
+#endif
 		db->Clear(false);
 		InterlockedIncrement(&SolvedCnt);
 	}
@@ -655,6 +687,21 @@ u32 __stdcall thr_proc_sota(void* data)
 
 	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
 	int max_iters = (1 << DP_BITS) * 20;
+
+	EcInt tames_range;
+	tames_range.Set(1);
+	tames_range.ShiftLeft(RANGE_BITS - 4);
+	EcInt wild_range;
+	wild_range.Set(1);
+	wild_range.ShiftLeft(RANGE_BITS - 1);
+
+#ifdef BETTER_EDGE_K
+	//make K better for points near edges of the range, define INTERVAL_STATS to see the difference
+	EcInt small_ext = tames_range; 
+	//small_ext.ShiftRight(1);
+	wild_range.Add(small_ext);
+#endif
+
 	while (1)
 	{
 		if (InterlockedDecrement(&ToSolveCnt) < 0)
@@ -662,19 +709,19 @@ u32 __stdcall thr_proc_sota(void* data)
 		EcInt KToSolve;
 		EcPoint PointToSolve;
 		EcPoint NegPointToSolve;
-
+		u64 pnt_iters = 0;
 		memset(old, 0, OLD_LEN * 8 * KANG_CNT);
 		KToSolve.RndBits(RANGE_BITS);
 
 		for (int i = 0; i < KANG_CNT; i++)
 		{
 			if (i < KANG_CNT / 3)
-				kangs[i].dist.RndBits(RANGE_BITS - 4);
+				kangs[i].dist.RndMax(tames_range);
 			else
 			{
-				kangs[i].dist.RndBits(RANGE_BITS - 1);
+				kangs[i].dist.RndMax(wild_range);
 				kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
-			}				
+			}
 		}
 
 		PointToSolve = ec.MultiplyG(KToSolve);
@@ -712,10 +759,10 @@ u32 __stdcall thr_proc_sota(void* data)
 				if (cycled)
 				{
 					if (i < KANG_CNT / 3)
-						kangs[i].dist.RndBits(RANGE_BITS - 4);
+						kangs[i].dist.RndMax(tames_range);
 					else
 					{
-						kangs[i].dist.RndBits(RANGE_BITS - 1);
+						kangs[i].dist.RndMax(wild_range);
 						kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 					}
 
@@ -746,6 +793,7 @@ u32 __stdcall thr_proc_sota(void* data)
 					kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
 				}
 				rec->iters++;
+				pnt_iters++;
 
 				if (kangs[i].p.x.data[0] & DPmask)
 					continue;
@@ -815,6 +863,12 @@ u32 __stdcall thr_proc_sota(void* data)
 				}
 			}
 		}
+#ifdef INTERVAL_STATS
+		KToSolve.ShiftRight(RANGE_BITS - INTERVAL_BITS);
+		int int_ind = (int)KToSolve.data[0];
+		int_cnt[int_ind]++;
+		int_sum[int_ind] += pnt_iters;
+#endif
 		db->Clear(false);
 		InterlockedIncrement(&SolvedCnt);
 	}
@@ -838,6 +892,21 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 
 	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
 	int max_iters = (1 << DP_BITS) * 20;
+
+	EcInt tames_range;
+	tames_range.Set(1);
+	tames_range.ShiftLeft(RANGE_BITS - 4);
+	EcInt wild_range;
+	wild_range.Set(1);
+	wild_range.ShiftLeft(RANGE_BITS - 1);
+
+#ifdef BETTER_EDGE_K
+	//make K better for points near edges of the range, define INTERVAL_STATS to see the difference
+	EcInt small_ext = tames_range;
+	//small_ext.ShiftRight(1);
+	wild_range.Add(small_ext);
+#endif
+
 	while (1)
 	{
 		if (InterlockedDecrement(&ToSolveCnt) < 0)
@@ -845,17 +914,17 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 		EcInt KToSolve;
 		EcPoint PointToSolve;
 		EcPoint NegPointToSolve;
-
+		u64 pnt_iters = 0;
 		memset(old, 0, OLD_LEN * 8 * KANG_CNT);
 		KToSolve.RndBits(RANGE_BITS);
 
 		for (int i = 0; i < KANG_CNT; i++)
 		{
 			if (i < KANG_CNT / 3)
-				kangs[i].dist.RndBits(RANGE_BITS - 4);
+				kangs[i].dist.RndMax(tames_range);
 			else
 			{
-				kangs[i].dist.RndBits(RANGE_BITS - 1);
+				kangs[i].dist.RndMax(wild_range);
 				kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 			}
 		}
@@ -895,10 +964,10 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 				if (cycled)
 				{
 					if (i < KANG_CNT / 3)
-						kangs[i].dist.RndBits(RANGE_BITS - 4);
+						kangs[i].dist.RndMax(tames_range);
 					else
 					{
-						kangs[i].dist.RndBits(RANGE_BITS - 1);
+						kangs[i].dist.RndMax(wild_range);
 						kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 					}
 
@@ -932,13 +1001,14 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 					kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
 				}
 				rec->iters++;
+				pnt_iters++;
 
 //when we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same
 //if inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K
 //using cheap point costs only (1MUL+1SQR)/2, this code is not optimized and always calculates Y for both points which is not necessary
 				if ((kangs[i].p.x.data[0] & 1) != 0)
 				{
-					//	rec->iters++; point (PreviousPoint - JumpPoint) is cheap so we don't count it
+					//	rec->iters++; assume that point (PreviousPoint - JumpPoint) is cheap so we don't count it as 1op
 					AddP.y.NegModP();
 					EcPoint p2 = ec.AddPointsHaveInv(Saved, AddP, inversion);
 					if ((p2.x.data[0] & 1) == 0)
@@ -1021,6 +1091,12 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 				}
 			}
 		}
+#ifdef INTERVAL_STATS
+		KToSolve.ShiftRight(RANGE_BITS - INTERVAL_BITS);
+		int int_ind = (int)KToSolve.data[0];
+		int_cnt[int_ind]++;
+		int_sum[int_ind] += pnt_iters;
+#endif
 		db->Clear(false);
 		InterlockedIncrement(&SolvedCnt);
 	}
@@ -1080,6 +1156,10 @@ void TestKangaroo(int Method)
 	if (ThrCnt)
 		return;
 	ToLog("Started, please wait...");
+#ifdef INTERVAL_STATS
+	memset(int_cnt, 0, sizeof(int_cnt));
+	memset(int_sum, 0, sizeof(int_sum));
+#endif
 	SetRndSeed(0);
 	Prepare(Method);
 	SetRndSeed(GetTickCount64());
@@ -1135,7 +1215,7 @@ void TestKangaroo(int Method)
 	size_t aver = iters_sum / POINTS_CNT;
 	sprintf(s, "Average jumps per point: %llu. Average jumps per kangaroo: %llu", aver, aver / KANG_CNT);
 	ToLog(s);
-	double root = pow(2, RANGE_BITS / 2);
+	double root = pow(2.0, RANGE_BITS / 2.0);
 	double coef = (double)aver / root;
 	sprintf(s, "%s, K = %f", names[Method], coef);
 	ToLog(s);
@@ -1144,6 +1224,17 @@ void TestKangaroo(int Method)
 	if (POINTS_CNT < 1000)
 		ToLog("Note: POINTS_CNT is too small to measure K precisely");
 	dlg->lbTime.SetWindowText("-----");
+#ifdef INTERVAL_STATS
+	for (int i = 0; i < INTERVAL_CNT; i++)
+	{
+		if (int_cnt[i])
+		{
+			double aver_k = (int_sum[i] / int_cnt[i]) / root;
+			sprintf(s, "Interval %d: points %d, aver K = %.3f", i, int_cnt[i], aver_k);
+			ToLog(s);
+		}
+	}
+#endif
 }
 
 void CExpKangDlg::OnBnClickedButton1()
