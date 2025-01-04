@@ -483,6 +483,21 @@ u32 __stdcall thr_proc_mirror(void* data)
 	db->Init(sizeof(TDB_Rec::x), sizeof(TDB_Rec), 0, 0);
 	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
 	int max_iters = (1 << DP_BITS) * 20;
+
+	EcInt tames_range;
+	tames_range.Set(1);
+	tames_range.ShiftLeft(RANGE_BITS - 1);
+	EcInt wild_range;
+	wild_range.Set(1);
+	wild_range.ShiftLeft(RANGE_BITS - 4);
+
+#ifdef BETTER_EDGE_K
+	//make K better for points near edges of the range, define INTERVAL_STATS to see the difference
+	EcInt small_ext = wild_range;
+	//small_ext.ShiftRight(1);
+	tames_range.Add(small_ext);
+#endif
+
 	while (1)
 	{
 		if (InterlockedDecrement(&ToSolveCnt) < 0)
@@ -495,9 +510,9 @@ u32 __stdcall thr_proc_mirror(void* data)
 		KToSolve.RndBits(RANGE_BITS);
 
 		for (int i = 0; i < KANG_CNT / 2; i++)
-			kangs[i].dist.RndBits(RANGE_BITS - 1); //tame
+			kangs[i].dist.RndMax(tames_range); //tame
 		for (int i = KANG_CNT / 2; i < KANG_CNT; i++)
-				kangs[i].dist.RndBits(RANGE_BITS - 4);
+				kangs[i].dist.RndMax(wild_range);
 
 		PointToSolve = ec.MultiplyG(KToSolve);
 		EcPoint Pnt = ec.AddPoints(PointToSolve, Pnt_NegHalfRange);
@@ -529,9 +544,9 @@ u32 __stdcall thr_proc_mirror(void* data)
 				if (cycled)
 				{
 					if (i < KANG_CNT / 2)
-						kangs[i].dist.RndBits(RANGE_BITS - 1); //tame
+						kangs[i].dist.RndMax(tames_range); //tame
 					else
-						kangs[i].dist.RndBits(RANGE_BITS - 4);								
+						kangs[i].dist.RndMax(wild_range);
 					kangs[i].p = ec.MultiplyG(kangs[i].dist);
 					if (i >= KANG_CNT / 2)
 						kangs[i].p = ec.AddPoints(kangs[i].p, Pnt);
