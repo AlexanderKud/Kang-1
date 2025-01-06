@@ -22,15 +22,14 @@
 
 #define RANGE_BITS			(32 + 8)
 #define DP_BITS				(5)
-//#define KANG_CNT			512
-#define KANG_CNT			(1 << (int)(0.25 * RANGE_BITS))
+#define KANG_CNT			512
+//#define KANG_CNT			(1 << (int)(0.25 * RANGE_BITS))
 #define CPU_THR_CNT			(63)
 #define POINTS_CNT			(1000)
 
 #define JMP_CNT				(16 * 1024)
 #define OLD_LEN				(16)
 
-//#define BETTER_EDGE_K
 //#define INTERVAL_STATS
 
 #ifdef INTERVAL_STATS
@@ -491,12 +490,9 @@ u32 __stdcall thr_proc_mirror(void* data)
 	wild_range.Set(1);
 	wild_range.ShiftLeft(RANGE_BITS - 4);
 
-#ifdef BETTER_EDGE_K
 	//make K better for points near edges of the range, define INTERVAL_STATS to see the difference
 	EcInt small_ext = wild_range;
-	//small_ext.ShiftRight(1);
 	tames_range.Add(small_ext);
-#endif
 
 	while (1)
 	{
@@ -651,6 +647,10 @@ u32 __stdcall thr_proc_mirror(void* data)
 // I couldn’t find any papers about this method, so let's assume that I invented it. :)
 // it gives best K=1.15
 
+EcInt WildRange;
+EcInt TameRange;
+EcInt TameOfs;
+
 bool Collision_SOTA(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, bool IsNeg)
 {
 	if (IsNeg)
@@ -703,20 +703,6 @@ u32 __stdcall thr_proc_sota(void* data)
 	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
 	int max_iters = (1 << DP_BITS) * 20;
 
-	EcInt tames_range;
-	tames_range.Set(1);
-	tames_range.ShiftLeft(RANGE_BITS - 4);
-	EcInt wild_range;
-	wild_range.Set(1);
-	wild_range.ShiftLeft(RANGE_BITS - 1);
-
-#ifdef BETTER_EDGE_K
-	//make K better for points near edges of the range, define INTERVAL_STATS to see the difference
-	EcInt small_ext = tames_range; 
-	//small_ext.ShiftRight(1);
-	wild_range.Add(small_ext);
-#endif
-
 	while (1)
 	{
 		if (InterlockedDecrement(&ToSolveCnt) < 0)
@@ -731,10 +717,13 @@ u32 __stdcall thr_proc_sota(void* data)
 		for (int i = 0; i < KANG_CNT; i++)
 		{
 			if (i < KANG_CNT / 3)
-				kangs[i].dist.RndMax(tames_range);
+			{
+				kangs[i].dist.RndMax(TameRange);
+				kangs[i].dist.Add(TameOfs);
+			}
 			else
 			{
-				kangs[i].dist.RndMax(wild_range);
+				kangs[i].dist.RndMax(WildRange);
 				kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 			}
 		}
@@ -774,10 +763,13 @@ u32 __stdcall thr_proc_sota(void* data)
 				if (cycled)
 				{
 					if (i < KANG_CNT / 3)
-						kangs[i].dist.RndMax(tames_range);
+					{
+						kangs[i].dist.RndMax(TameRange);
+						kangs[i].dist.Add(TameOfs);
+					}
 					else
 					{
-						kangs[i].dist.RndMax(wild_range);
+						kangs[i].dist.RndMax(WildRange);
 						kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 					}
 
@@ -894,6 +886,10 @@ u32 __stdcall thr_proc_sota(void* data)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//This method is the same as SOTA, but also uses cheap second point.
+//When we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same.
+//If inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K.
+//Using cheap point costs only(1MUL + 1SQR) / 2. K is approximately 1.02 for this method(assuming cheap point is free and not counted as 1op).
 
 u32 __stdcall thr_proc_sota_plus(void* data)
 {
@@ -907,20 +903,6 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 
 	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
 	int max_iters = (1 << DP_BITS) * 20;
-
-	EcInt tames_range;
-	tames_range.Set(1);
-	tames_range.ShiftLeft(RANGE_BITS - 4);
-	EcInt wild_range;
-	wild_range.Set(1);
-	wild_range.ShiftLeft(RANGE_BITS - 1);
-
-#ifdef BETTER_EDGE_K
-	//make K better for points near edges of the range, define INTERVAL_STATS to see the difference
-	EcInt small_ext = tames_range;
-	//small_ext.ShiftRight(1);
-	wild_range.Add(small_ext);
-#endif
 
 	while (1)
 	{
@@ -936,10 +918,13 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 		for (int i = 0; i < KANG_CNT; i++)
 		{
 			if (i < KANG_CNT / 3)
-				kangs[i].dist.RndMax(tames_range);
+			{
+				kangs[i].dist.RndMax(TameRange);
+				kangs[i].dist.Add(TameOfs);
+			}
 			else
 			{
-				kangs[i].dist.RndMax(wild_range);
+				kangs[i].dist.RndMax(WildRange);
 				kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 			}
 		}
@@ -979,10 +964,13 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 				if (cycled)
 				{
 					if (i < KANG_CNT / 3)
-						kangs[i].dist.RndMax(tames_range);
+					{
+						kangs[i].dist.RndMax(TameRange);
+						kangs[i].dist.Add(TameOfs);
+					}
 					else
 					{
-						kangs[i].dist.RndMax(wild_range);
+						kangs[i].dist.RndMax(WildRange);
 						kangs[i].dist.data[0] &= 0xFFFFFFFFFFFFFFFE; //must be even
 					}
 
@@ -1131,6 +1119,22 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 #define METHOD_SOTA_PLUS	4
 char* names[] = { "Classic", "3-Way", "Mirror", "SOTA", "SOTA+" };
 
+void SetSotaParams(int wr, int tr, int tofs)
+{
+	EcInt x32;
+	x32.Set(1);
+	x32.ShiftLeft(RANGE_BITS - 5);
+	WildRange.Set(0);
+	for (int i = 0; i < wr; i++)
+		WildRange.Add(x32);
+	TameRange.Set(0);
+	for (int i = 0; i < tr; i++)
+		TameRange.Add(x32);
+	TameOfs.Set(0);
+	for (int i = 0; i < tofs; i++)
+		TameOfs.Add(x32);
+}
+
 void Prepare(int Method)
 {
 	EcInt minjump, t;
@@ -1164,6 +1168,12 @@ void Prepare(int Method)
 	tt.ShiftLeft(RANGE_BITS - 5); //half of tame range width
 	Int_TameOffset.Sub(tt);
 	Pnt_TameOffset = ec.MultiplyG(Int_TameOffset);
+
+	if ((Method == METHOD_SOTA) || (Method == METHOD_SOTA_PLUS))
+	{
+	//	SetSotaParams(16, 2, 0); //old parameters (diagram.jpg), K is not good at the edges
+		SetSotaParams(6, 1, 10); //optimized parameters, K is smoother, define INTERVAL_STATS to see the difference
+	}
 }
 
 void TestKangaroo(int Method)
@@ -1232,7 +1242,7 @@ void TestKangaroo(int Method)
 	ToLog(s);
 	double root = pow(2.0, RANGE_BITS / 2.0);
 	double coef = (double)aver / root;
-	sprintf(s, "%s, K = %f", names[Method], coef);
+	sprintf(s, "%s, K = %.3f (including DP overhead)", names[Method], coef);
 	ToLog(s);
 	if (RANGE_BITS < 40)
 		ToLog("Note: RANGE_BITS is too small to measure K precisely");
