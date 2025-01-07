@@ -1009,6 +1009,8 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 //when we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same
 //if inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K
 //using cheap point costs only (1MUL+1SQR)/2, this code is not optimized and always calculates Y for both points which is not necessary
+//K is 1.02
+/*
 				if ((kangs[i].p.x.data[0] & 1) != 0)
 				{
 					//	rec->iters++; assume that point (PreviousPoint - JumpPoint) is cheap so we don't count it as 1op
@@ -1024,6 +1026,23 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 							kangs[i].dist.Add(EcJumps[jmp_ind].dist);
 					}
 				}
+*/
+
+//for GPU, we dont get any speedup from first IF, so better to always calc both points and choose the best one
+//this code is not optimized and always calculates Y for both points which is not necessary
+//K is 0.99
+				AddP.y.NegModP();
+				EcPoint p2 = ec.AddPointsHaveInv(Saved, AddP, inversion);
+				if ((p2.x.data[0] & 3) < (kangs[i].p.x.data[0] & 3))
+				{
+					kangs[i].p = p2;
+					kangs[i].dist = SavedD;
+					if (!inv)
+						kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
+					else
+						kangs[i].dist.Add(EcJumps[jmp_ind].dist);
+				}
+/**/
 ////
 
 				if (kangs[i].p.x.data[0] & DPmask)
@@ -1173,6 +1192,7 @@ void Prepare(int Method)
 	{
 	//	SetSotaParams(16, 2, 0); //old parameters (diagram.jpg), K is not good at the edges
 		SetSotaParams(6, 1, 10); //optimized parameters, K is smoother, define INTERVAL_STATS to see the difference
+		//there are several other good option sets, but all of them give same K
 	}
 }
 
