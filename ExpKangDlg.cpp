@@ -904,7 +904,7 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 	u64* old = (u64*)malloc(OLD_LEN * 8 * KANG_CNT);
 	int max_iters = (1 << DP_BITS) * 20;
 
-	while (1)
+	while (1) 
 	{
 		if (InterlockedDecrement(&ToSolveCnt) < 0)
 			break;
@@ -1026,8 +1026,29 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 							kangs[i].dist.Add(EcJumps[jmp_ind].dist);
 					}
 				}
-*/
+/**/
 
+//"lite" variant, pay only (1MUL+1SQR)/4, this code is not optimized and always calculates Y for both points which is not necessary
+//K is 1.05
+/*
+				if ((kangs[i].p.x.data[0] & 3) == 3)
+				{
+					//	rec->iters++; assume that point (PreviousPoint - JumpPoint) is cheap so we don't count it as 1op
+					AddP.y.NegModP();
+					EcPoint p2 = ec.AddPointsHaveInv(Saved, AddP, inversion);
+					if ((p2.x.data[0] & 3) != 3)
+					{
+						kangs[i].p = p2;
+						kangs[i].dist = SavedD;
+						if (!inv)
+							kangs[i].dist.Sub(EcJumps[jmp_ind].dist);
+						else
+							kangs[i].dist.Add(EcJumps[jmp_ind].dist);
+					}
+				}
+/**/
+
+/**/
 //for GPU, we dont get any speedup from first IF, so better to always calc both points and choose the best one
 //this code is not optimized and always calculates Y for both points which is not necessary
 //K is 0.99
@@ -1043,8 +1064,9 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 						kangs[i].dist.Add(EcJumps[jmp_ind].dist);
 				}
 /**/
-////
 
+
+////
 				if (kangs[i].p.x.data[0] & DPmask)
 					continue;
 
